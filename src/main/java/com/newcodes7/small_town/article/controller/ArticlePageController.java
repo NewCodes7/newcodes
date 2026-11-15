@@ -30,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
@@ -37,6 +38,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.View;
 
 /**
  * 아티클 도메인 Thymeleaf 페이지 렌더링 컨트롤러.
@@ -228,51 +231,76 @@ public class ArticlePageController {
     }
 
     @GetMapping("/articles/{id:\\d+}")
-    public String articleDetailRedirect(@PathVariable Long id) {
-        // /articles/123 -> /articles/123-slug 리다이렉트
-        Article article = articleRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Article not found"));
-
-        String slug = generateSlug(article);
-        String encodedSlug = URLEncoder.encode(slug, StandardCharsets.UTF_8);
-        return "redirect:/articles/" + id + "-" + encodedSlug;
+    public String articleDetailRedirect(@PathVariable Long id, HttpServletRequest request) {
+        // /articles/123 -> /articles/123-slug 영구 리다이렉트
+        Article article = findPublicArticle(id);
+        return permanentRedirect(request, canonicalPath(article));
     }
 
     @GetMapping("/articles/{id:\\d+}/{slug}")
-    public String articleDetailOldFormat(@PathVariable Long id, @PathVariable String slug) {
-        // 기존 /articles/123/slug 형식 -> 새 형식으로 리다이렉트
-        Article article = articleRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Article not found"));
-
-        String newSlug = generateSlug(article);
-        String encodedSlug = URLEncoder.encode(newSlug, StandardCharsets.UTF_8);
-        return "redirect:/articles/" + id + "-" + encodedSlug;
+    public String articleDetailOldFormat(@PathVariable Long id, @PathVariable String slug, HttpServletRequest request) {
+        // 기존 /articles/123/slug 형식 -> 새 형식으로 영구 리다이렉트
+        Article article = findPublicArticle(id);
+        return permanentRedirect(request, canonicalPath(article));
     }
 
     @GetMapping("/articles/{idSlug:\\d+-.*}")
-    public String articleDetail(@PathVariable String idSlug, Model model, HttpServletResponse response) {
+    public String articleDetail(@PathVariable String idSlug, Model model,
+                                HttpServletRequest request, HttpServletResponse response) {
         // /articles/123-slug 형식
         int dashIndex = idSlug.indexOf('-');
         Long id = Long.parseLong(idSlug.substring(0, dashIndex));
+        String requestedSlug = idSlug.substring(dashIndex + 1);
 
-        Article article = articleRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Article not found"));
+        Article article = findPublicArticle(id);
+
+        // 슬러그가 정규 슬러그와 다르면(제목 변경·오타·잘린 링크) 정규 URL로 301 — 같은 글이 여러 URL로 200을 내지 않게 한다.
+        // @PathVariable은 디코딩된 값이고 generateSlug()는 [a-z0-9가-힣-]만 남기므로, 정규 URL로 다시 들어오면 항상 같아 루프가 없다.
+        if (!requestedSlug.equals(generateSlug(article))) {
+            return permanentRedirect(request, canonicalPath(article));
+        }
 
         // Last-Modified 헤더 설정 (구글 신선도 신호)
         if (article.getPublishedAt() != null) {
             String lastModified = DateTimeFormatter.RFC_1123_DATE_TIME
                 .format(article.getPublishedAt().atOffset(ZoneOffset.UTC));
             response.setHeader("Last-Modified", lastModified);
+            // JSON-LD datePublished는 ISO 8601이어야 한다(DTO의 publishedAt은 화면용 "yyyy-MM-dd HH:mm").
+            // Last-Modified와 같은 기준(UTC)으로 맞춘다.
+            model.addAttribute("publishedAtIso", article.getPublishedAt().atOffset(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         }
 
         ArticleListResponseDto articleDto = new ArticleListResponseDto(article);
         model.addAttribute("article", articleDto);
         model.addAttribute("mainRepresentativeChunkInfo", relatedArticleService.getRepresentativeChunkInfo(id));
 
-        String slug = generateSlug(article);
-        String encodedSlug = URLEncoder.encode(slug, StandardCharsets.UTF_8);
-        model.addAttribute("canonicalUrl", baseUrl + "/articles/" + id + "-" + encodedSlug);
+        model.addAttribute("canonicalUrl", baseUrl + canonicalPath(article));
         return "article-detail";
+    }
+
+    /**
+     * 공개 중인 아티클을 찾고, 없거나 삭제된 글이면 404를 던진다.
+     * RuntimeException을 던지면 500이 되어 크롤러가 서버 오류로 집계한다.
+     */
+    private Article findPublicArticle(Long id) {
+        return articleRepository.findById(id)
+            .filter(article -> article.getDeletedAt() == null)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found: " + id));
+    }
+
+    private String canonicalPath(Article article) {
+        String encodedSlug = URLEncoder.encode(generateSlug(article), StandardCharsets.UTF_8);
+        return "/articles/" + article.getId() + "-" + encodedSlug;
+    }
+
+    /**
+     * "redirect:"는 기본이 302(임시)라 검색엔진이 원래 URL을 계속 색인 대상으로 본다. 정규 URL로 보내는 경우는 301로 내보낸다.
+     * RESPONSE_STATUS_ATTRIBUTE를 지정하면 RedirectView가 Location을 상대 경로 그대로 쓰므로 http:// 절대 URL도 생기지 않는다.
+     */
+    private String permanentRedirect(HttpServletRequest request, String path) {
+        request.setAttribute(View.RESPONSE_STATUS_ATTRIBUTE, HttpStatus.MOVED_PERMANENTLY);
+        return "redirect:" + path;
     }
 
     private String generateSlug(Article article) {

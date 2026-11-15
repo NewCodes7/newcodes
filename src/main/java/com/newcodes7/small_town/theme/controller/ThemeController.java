@@ -5,11 +5,12 @@ import com.newcodes7.small_town.search.entity.SearchLog;
 import com.newcodes7.small_town.search.service.SearchLogService;
 import com.newcodes7.small_town.theme.dto.ThemeResponseDto;
 import com.newcodes7.small_town.theme.service.ThemeService;
-
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,8 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
-
-import java.util.List;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 공개 테마 컨트롤러
@@ -34,6 +34,9 @@ public class ThemeController {
     private final SearchLogService searchLogService;
     private final com.newcodes7.small_town.auth.repository.UserRepository userRepository;
 
+    @Value("${app.base-url}")
+    private String baseUrl;
+
     /**
      * 테마 목록 페이지
      */
@@ -41,6 +44,7 @@ public class ThemeController {
     public String themes(Model model) {
         List<ThemeResponseDto> themes = themeService.getActiveThemes();
         model.addAttribute("themes", themes);
+        model.addAttribute("canonicalUrl", baseUrl + "/themes");
         return "themes";
     }
 
@@ -53,7 +57,13 @@ public class ThemeController {
                               @AuthenticationPrincipal UserDetails userDetails,
                               HttpServletRequest request,
                               Model model) {
-        ThemeResponseDto theme = themeService.getThemeById(themeId);
+        ThemeResponseDto theme;
+        try {
+            theme = themeService.getThemeById(themeId);
+        } catch (IllegalArgumentException e) {
+            // 없는 테마는 500이 아니라 404 — 크롤러가 5xx를 만나면 사이트 전체 크롤링 속도를 낮춘다
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
 
         // 검색 로그 저장 (keyword 파라미터가 있고 로그인한 경우)
         if (keyword != null && !keyword.trim().isEmpty() && userDetails != null) {
@@ -66,6 +76,7 @@ public class ThemeController {
         }
 
         model.addAttribute("theme", theme);
+        model.addAttribute("canonicalUrl", baseUrl + "/themes/" + themeId);
         return "theme-detail";
     }
 
