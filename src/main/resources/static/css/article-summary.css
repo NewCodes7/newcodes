@@ -1,0 +1,25 @@
+/* Article detail - AI 3줄 요약 (서버 렌더링) */
+
+.article-ai-summary {
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    background: #E8F7EF;
+    border-radius: 10px;
+}
+
+.article-ai-summary-title {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #1F2937;
+}
+
+.article-ai-summary-text {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: #1F2937;
+    /* Article.summary는 "• 줄\n• 줄" 형식이라 줄바꿈을 그대로 살린다 */
+    white-space: pre-line;
+    word-break: keep-all;
+}

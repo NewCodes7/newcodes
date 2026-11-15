@@ -5,6 +5,12 @@
       layout:decorate="~{layout/base}">
 <head>
     <title th:text="${theme.name} + ' - NewCodes'">테마 상세</title>
+    <meta name="description" th:content="${#strings.isEmpty(theme.description) ? theme.name + ' - 주제별로 엄선한 IT 기업 기술 블로그 글과 영상 모음입니다.' : theme.description}">
+    <meta property="og:title" th:content="${theme.name} + ' - NewCodes'">
+    <meta property="og:description" th:content="${#strings.isEmpty(theme.description) ? theme.name + ' - 주제별로 엄선한 IT 기업 기술 블로그 글과 영상 모음입니다.' : theme.description}">
+    <meta property="og:type" content="website">
+    <meta property="og:image"
+          th:content="${theme.thumbnailUrl != null ? theme.thumbnailUrl : 'https://d1g8228yawhpnq.cloudfront.net/newcodes.png'}">
     <link rel="stylesheet" type="text/css" th:href="@{/css/default-thumbnail.css}">
     <style>
         :root {

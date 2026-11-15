@@ -16,6 +16,7 @@
     <meta name="twitter:card" content="summary_large_image">
 
     <link rel="stylesheet" type="text/css" th:href="@{/css/default-thumbnail.css}">
+    <link rel="stylesheet" type="text/css" th:href="@{/css/article-summary.css}">
 
     <!-- 구조화 데이터 (JSON-LD) -->
     <script type="application/ld+json" th:inline="javascript">
@@ -25,8 +26,9 @@
       "headline": /*[[${article.translatedTitle != null ? article.translatedTitle : article.title}]]*/ "",
       "description": /*[[${article.summary != null ? article.summary : (article.translatedTitle != null ? article.translatedTitle : article.title) + ' - ' + article.corporation.name + ' 기술 블로그'}]]*/ "",
       "image": /*[[${article.thumbnailImage}]]*/ "",
-      "datePublished": /*[[${article.publishedAt}]]*/ "",
+      "datePublished": /*[[${publishedAtIso}]]*/ "",
       "url": /*[[${canonicalUrl}]]*/ "",
+      "isBasedOn": /*[[${article.link}]]*/ "",
       "author": {
         "@type": "Organization",
         "name": /*[[${article.corporation.name}]]*/ ""
@@ -656,6 +658,13 @@
                         <small class="text-muted" style="white-space: nowrap; font-size: 0.85rem;"
                                th:text="${#strings.replace(#strings.substring(article.publishedAt.toString(), 0, 10), '-', '.')}">2024-01-01</small>
                     </div>
+
+                    <!-- AI 3줄 요약: 서버 렌더링으로 노출해 원문 링크만 있는 얇은 페이지가 되지 않게 한다 -->
+                    <section th:if="${article.summary != null and !#strings.isEmpty(article.summary)}"
+                             class="article-ai-summary" aria-labelledby="articleAiSummaryTitle">
+                        <h2 id="articleAiSummaryTitle" class="article-ai-summary-title">AI 3줄 요약</h2>
+                        <p class="article-ai-summary-text" th:text="${article.summary}">요약</p>
+                    </section>
 
                     <!-- Actions -->
                     <div class="d-flex gap-2">
