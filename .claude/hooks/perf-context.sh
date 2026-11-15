@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # AI 리뷰(agent-review.sh)에 주입할 "프로덕션 성능 컨텍스트" 블록을 stdout 으로 출력한다.
-#   ① 고정 서버 사양(WAS/DB) — 거의 변하지 않는 사실.
+#   ① 서버 사양 — JVM 힙은 docker-compose.yml 의 JAVA_OPTS 에서 읽고, 호스트 vCPU·RAM 만 고정값.
+#      (힙을 여기 하드코딩했다가 2026-08-20 의 -Xmx 1024m → 512m 변경을 놓친 적이 있다)
 #   ② 실제 데이터량 — 프로덕션 /api/admin/metrics/table-stats 를 호출해 동적으로 가져온다.
 # 데이터량 조회 실패는 게이트를 막지 않는다(캐시 폴백 → 미가용 표기). 항상 exit 0.
 set -uo pipefail
@@ -45,13 +46,26 @@ login_token() {
   printf '%s' "$tok"
 }
 
-# ── ① 고정 서버 사양 ─────────────────────────────────────────────
-cat <<'SPECS'
+# ── ① 서버 사양 ─────────────────────────────────────────────────
+# JVM 힙: 운영 컨테이너가 쓰는 docker-compose.yml 의 JAVA_OPTS 기본값(주석 줄 제외)에서 읽는다.
+# 운영 .env 에서 JAVA_OPTS 를 덮어쓰면 그 값이 우선이라는 점도 함께 알린다.
+compose_opts=$(grep -E '^[[:space:]]*-[[:space:]]*JAVA_OPTS=' docker-compose.yml 2>/dev/null | head -n 1)
+xms=$(printf '%s' "$compose_opts" | grep -oE -e '-Xms[0-9]+[kKmMgG]' | head -n 1)
+xmx=$(printf '%s' "$compose_opts" | grep -oE -e '-Xmx[0-9]+[kKmMgG]' | head -n 1)
+if [ -n "$xmx" ]; then
+  heap_line="JVM ${xms:+$xms }$xmx (G1GC). 출처: docker-compose.yml 의 JAVA_OPTS 기본값 — 운영 .env 가 덮어쓰면 그 값."
+else
+  heap_line="JVM 힙 설정을 docker-compose.yml 에서 읽지 못했다 → 힙 상한 512MB 로 보수적으로 가정할 것."
+fi
+
+# 호스트 사양(vCPU·RAM)은 코드로 읽을 곳이 없어 고정값이다. 바뀌면 여기와
+# docs/operations/DB_LOAD_REDUCTION.md 를 같이 고친다.
+cat <<SPECS
 [프로덕션 서버 사양 — 이 제약 안에서 동작해야 함]
-- WAS 서버: vCPU 2, RAM 2GB. JVM -Xms512m -Xmx1024m (G1GC, 힙 상한 1GB).
+- WAS 서버: vCPU 2, RAM 2GB. ${heap_line}
   PostgreSQL 을 제외한 거의 모든 것(Spring Boot, Selenium 크롤러, Lucene Nori 형태소 분석,
   임베딩 호출, 스케줄러)이 이 한 대에서 동작 → 힙·CPU 여유가 적다.
-- DB 서버: vCPU 1, RAM 1GB. PostgreSQL(pgvector + ParadeDB)만 동작.
+- DB 서버: vCPU 2, RAM 1GB. PostgreSQL(pgvector + ParadeDB)만 동작. HikariCP 풀은 5.
   메모리가 작아 대형 정렬(work_mem 초과 → 디스크 spill), 대용량 결과셋, 벡터/BM25 인덱스
   메모리 압박에 매우 취약하다. 인덱스 없는 대용량 테이블 풀스캔은 곧바로 병목이 된다.
 SPECS
