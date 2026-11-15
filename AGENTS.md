@@ -12,7 +12,7 @@
 - `./gradlew test --tests "*ClassName*"` runs a specific test class.
 
 ## Coding Style & Naming Conventions
-- Java 17 toolchain; follow standard Spring Boot conventions.
+- Java 26 toolchain; follow standard Spring Boot conventions.
 - Use 4-space indentation, keep classes in the correct module package, and avoid exposing entities directly (use DTOs).
 - Naming patterns (from existing code):
   - Entity: `Article`, `Corporation`

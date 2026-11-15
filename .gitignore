@@ -43,3 +43,6 @@ docs/자소서/
 
 # 작업용 임시 폴더 (런북·분석 메모 등) — 추적하지 않는다
 temp/
+
+# 개인 Claude Code 설정 (커밋하지 않음)
+.claude/settings.local.json
