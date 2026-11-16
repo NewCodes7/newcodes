@@ -98,6 +98,7 @@ class SeoTemplateRenderingTest {
         assertThat(html).contains("href=\"/articles/2-");                 // 서버 렌더링 연관 글 내부 링크
         assertThat(html).doesNotContain("related-articles-loading");
         assertThat(html).contains("href=\"/about\"");                     // 푸터 서비스 소개 링크
+        assertThat(html).containsOnlyOnce("<meta name=\"naver-site-verification\" content=\"0c8fb0012e725e294de5560f56fb2e1ca2ecaee3\"");
         assertJsonLdParses(html);
         assertThat(html).containsPattern("\"datePublished\":\\s*\"2026-07-22T10:09:20\\+09:00\"");
     }
