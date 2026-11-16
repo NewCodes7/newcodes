@@ -158,6 +158,21 @@ class ArticlePageControllerSeoTest {
     }
 
     @Test
+    @DisplayName("원문 RSS 발췌가 summary에 남은 글은 AI 요약이 아니므로 noindex, AI 요약 영역·설명문에 쓰지 않는다")
+    void articleDetail_원문발췌_noindex() {
+        Article article = article(1L, null, null);
+        article.setSummary("Date:2025.08.07");
+        when(articleRepository.findById(1L)).thenReturn(Optional.of(article));
+        Model model = new ConcurrentModel();
+
+        controller.articleDetail("1-" + CANONICAL_SLUG, model, new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(model.getAttribute("articleIndexable")).isEqualTo(false);
+        assertThat(model.getAttribute("aiSummary")).isNull();
+        assertThat((String) model.getAttribute("metaDescription")).startsWith(TITLE + " - NewCodes 기술 블로그");
+    }
+
+    @Test
     @DisplayName("정책을 끄면(index-requires-summary=false) 요약이 없어도 index")
     void articleDetail_정책off_index() {
         ReflectionTestUtils.setField(controller, "articleIndexPolicy", new ArticleIndexPolicy(false));

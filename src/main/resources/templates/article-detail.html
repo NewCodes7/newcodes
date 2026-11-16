@@ -662,10 +662,10 @@
                     </div>
 
                     <!-- AI 3줄 요약: 서버 렌더링으로 노출해 원문 링크만 있는 얇은 페이지가 되지 않게 한다 -->
-                    <section th:if="${article.summary != null and !#strings.isEmpty(article.summary)}"
+                    <section th:if="${aiSummary != null}"
                              class="article-ai-summary" aria-labelledby="articleAiSummaryTitle">
                         <h2 id="articleAiSummaryTitle" class="article-ai-summary-title">AI 3줄 요약</h2>
-                        <p class="article-ai-summary-text" th:text="${article.summary}">요약</p>
+                        <p class="article-ai-summary-text" th:text="${aiSummary}">요약</p>
                     </section>
 
                     <!-- Actions -->

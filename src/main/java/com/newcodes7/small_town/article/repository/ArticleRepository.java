@@ -610,7 +610,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     @Query("SELECT a FROM Article a " +
            "WHERE a.deletedAt IS NULL " +
            "AND a.content IS NOT NULL " +
-           "AND (a.summary IS NULL OR a.summary = '') " +
+           "AND (a.summary IS NULL OR a.summary NOT LIKE '\u2022%') " +
            "ORDER BY a.createdAt DESC")
     List<Article> findArticlesWithContentAndWithoutSummary(Pageable pageable);
 
@@ -625,7 +625,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
            "WHERE a.deletedAt IS NULL " +
            "AND a.corporation.id = :corporationId " +
            "AND a.content IS NOT NULL " +
-           "AND (a.summary IS NULL OR a.summary = '') " +
+           "AND (a.summary IS NULL OR a.summary NOT LIKE '\u2022%') " +
            "ORDER BY a.createdAt DESC")
     List<Article> findArticlesWithContentAndWithoutSummaryByCorporationId(
             @Param("corporationId") Long corporationId,
@@ -901,7 +901,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     @Query(value = "SELECT a.id, a.title, a.translated_title, a.published_at " +
            "FROM article a " +
            "WHERE a.deleted_at IS NULL " +
-           "AND a.summary IS NOT NULL AND btrim(a.summary) <> '' " +
+           "AND ltrim(a.summary) LIKE '\u2022%' " +
            "ORDER BY a.published_at DESC",
            nativeQuery = true)
     List<Object[]> findIndexableArticlesForSitemap();

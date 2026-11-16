@@ -288,6 +288,8 @@ public class ArticlePageController {
         boolean indexable = articleIndexPolicy.isIndexable(article.getSummary());
         model.addAttribute("articleIndexable", indexable);
         model.addAttribute("metaDescription", metaDescription(article));
+        // 화면의 "AI 3줄 요약"은 진짜 AI 요약만. 원문 RSS 발췌가 남은 글에 AI 라벨을 붙이지 않는다
+        model.addAttribute("aiSummary", ArticleIndexPolicy.isAiSummary(article.getSummary()) ? article.getSummary() : null);
         // 색인 대상 글은 연관 글을 서버에서 렌더링해 HTML에 내부 링크를 싣는다(null이면 템플릿이 기존 JS 로딩으로 폴백).
         model.addAttribute("relatedArticles", indexable ? relatedArticlesOrNull(id) : null);
         model.addAttribute("mainRepresentativeChunkInfo", relatedArticleService.getRepresentativeChunkInfo(id));
@@ -327,7 +329,7 @@ public class ArticlePageController {
     private String metaDescription(Article article) {
         String title = article.getTranslatedTitle() != null ? article.getTranslatedTitle() : article.getTitle();
         String summary = article.getSummary();
-        if (summary == null || summary.isBlank()) {
+        if (!ArticleIndexPolicy.isAiSummary(summary)) {
             return title + " - " + article.getCorporation().getName()
                 + " 기술 블로그. NewCodes에서 국내외 IT 기업의 최신 기술 블로그를 한곳에서 만나보세요.";
         }
