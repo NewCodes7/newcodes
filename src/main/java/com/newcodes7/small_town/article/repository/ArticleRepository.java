@@ -895,6 +895,18 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     List<Object[]> findAllActiveArticlesForSitemap();
 
     /**
+     * Sitemap 생성용 경량 조회 — 색인 대상(AI 요약이 있는 글)만.
+     * 상세 페이지 robots 메타와 같은 규칙(ArticleIndexPolicy)이라 "사이트맵엔 있는데 noindex"가 생기지 않는다.
+     */
+    @Query(value = "SELECT a.id, a.title, a.translated_title, a.published_at " +
+           "FROM article a " +
+           "WHERE a.deleted_at IS NULL " +
+           "AND a.summary IS NOT NULL AND btrim(a.summary) <> '' " +
+           "ORDER BY a.published_at DESC",
+           nativeQuery = true)
+    List<Object[]> findIndexableArticlesForSitemap();
+
+    /**
      * Sitemap lastmod용: 전체 최신 아티클 발행일 조회
      */
     @Query(value = "SELECT MAX(a.published_at) FROM article a WHERE a.deleted_at IS NULL",

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.newcodes7.small_town.article.repository.ArticleRepository;
+import com.newcodes7.small_town.article.service.ArticleIndexPolicy;
 import com.newcodes7.small_town.embedding.service.RelatedArticleService;
 import com.newcodes7.small_town.global.entity.Article;
 import com.newcodes7.small_town.global.entity.Corporation;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -49,6 +51,9 @@ class ArticlePageControllerSeoTest {
 
     @Mock
     private RelatedArticleService relatedArticleService;
+
+    @Spy
+    private ArticleIndexPolicy articleIndexPolicy = new ArticleIndexPolicy(true);
 
     @InjectMocks
     private ArticlePageController controller;
@@ -109,7 +114,59 @@ class ArticlePageControllerSeoTest {
         assertThat(view).isEqualTo("article-detail");
         assertThat(request.getAttribute(View.RESPONSE_STATUS_ATTRIBUTE)).isNull();
         assertThat(model.getAttribute("canonicalUrl")).isEqualTo(BASE_URL + canonicalPath(1L));
-        assertThat(model.getAttribute("publishedAtIso")).isEqualTo("2026-07-22T10:09:20Z");
+        // publishedAt은 KST 벽시계 시각(hibernate.jdbc.time_zone=Asia/Seoul)이라 +09:00을 붙인다
+        assertThat(model.getAttribute("publishedAtIso")).isEqualTo("2026-07-22T10:09:20+09:00");
+    }
+
+    @Test
+    @DisplayName("Last-Modified는 KST 시각을 UTC로 변환한 값(9시간 이른 GMT)")
+    void articleDetail_LastModified_KST기준() {
+        when(articleRepository.findById(1L))
+            .thenReturn(Optional.of(article(1L, LocalDateTime.of(2026, 7, 22, 10, 9, 20), null)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.articleDetail("1-" + CANONICAL_SLUG, new ConcurrentModel(), new MockHttpServletRequest(), response);
+
+        assertThat(response.getHeader("Last-Modified")).isEqualTo("Wed, 22 Jul 2026 01:09:20 GMT");
+    }
+
+    @Test
+    @DisplayName("요약 없는 글은 noindex(articleIndexable=false), 설명문은 제목·회사 기본 문구")
+    void articleDetail_요약없음_noindex() {
+        when(articleRepository.findById(1L)).thenReturn(Optional.of(article(1L, null, null)));
+        Model model = new ConcurrentModel();
+
+        controller.articleDetail("1-" + CANONICAL_SLUG, model, new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(model.getAttribute("articleIndexable")).isEqualTo(false);
+        assertThat((String) model.getAttribute("metaDescription")).startsWith(TITLE + " - NewCodes 기술 블로그");
+    }
+
+    @Test
+    @DisplayName("요약 있는 글은 index, 설명문은 요약을 한 문단으로(글머리·줄바꿈 제거)")
+    void articleDetail_요약있음_index() {
+        Article article = article(1L, null, null);
+        article.setSummary("• 가상 스레드는 JDK 21에서 정식 도입됐다\n• 캐리어 스레드에 마운트되어 실행된다\n• 블로킹 시 언마운트된다");
+        when(articleRepository.findById(1L)).thenReturn(Optional.of(article));
+        Model model = new ConcurrentModel();
+
+        controller.articleDetail("1-" + CANONICAL_SLUG, model, new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(model.getAttribute("articleIndexable")).isEqualTo(true);
+        assertThat(model.getAttribute("metaDescription"))
+            .isEqualTo("가상 스레드는 JDK 21에서 정식 도입됐다 캐리어 스레드에 마운트되어 실행된다 블로킹 시 언마운트된다");
+    }
+
+    @Test
+    @DisplayName("정책을 끄면(index-requires-summary=false) 요약이 없어도 index")
+    void articleDetail_정책off_index() {
+        ReflectionTestUtils.setField(controller, "articleIndexPolicy", new ArticleIndexPolicy(false));
+        when(articleRepository.findById(1L)).thenReturn(Optional.of(article(1L, null, null)));
+        Model model = new ConcurrentModel();
+
+        controller.articleDetail("1-" + CANONICAL_SLUG, model, new MockHttpServletRequest(), new MockHttpServletResponse());
+
+        assertThat(model.getAttribute("articleIndexable")).isEqualTo(true);
     }
 
     @Test

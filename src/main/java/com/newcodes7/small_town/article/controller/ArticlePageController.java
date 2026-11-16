@@ -2,7 +2,9 @@ package com.newcodes7.small_town.article.controller;
 
 import com.newcodes7.small_town.article.dto.ArticleListResponseDto;
 import com.newcodes7.small_town.article.dto.ArticleResponseDto;
+import com.newcodes7.small_town.article.dto.RelatedArticleDto;
 import com.newcodes7.small_town.article.repository.ArticleRepository;
+import com.newcodes7.small_town.article.service.ArticleIndexPolicy;
 import com.newcodes7.small_town.article.service.ArticleService;
 import com.newcodes7.small_town.auth.entity.User;
 import com.newcodes7.small_town.corporation.dto.CorporationResponseDto;
@@ -20,7 +22,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,10 +54,16 @@ import org.springframework.web.servlet.View;
 @RequiredArgsConstructor
 public class ArticlePageController {
 
+    private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int META_DESCRIPTION_MAX = 155;
+    /** 상세 페이지 JS(/api/articles/{id}/related?limit=3)와 같은 값이어야 relatedArticles 캐시를 공유한다 */
+    private static final int RELATED_ARTICLE_LIMIT = 3;
+
     @Value("${app.base-url}")
     private String baseUrl;
 
     private final ArticleService articleService;
+    private final ArticleIndexPolicy articleIndexPolicy;
     private final ArticleSearchService articleSearchService;
     private final SemanticTermExpansionService semanticExpansionService;
     private final CorporationService corporationService;
@@ -226,6 +236,7 @@ public class ArticlePageController {
 
         model.addAttribute("totalArticles", totalArticles);
         model.addAttribute("totalCorporations", totalCorporations);
+        model.addAttribute("canonicalUrl", baseUrl + "/about");
 
         return "about";
     }
@@ -262,17 +273,23 @@ public class ArticlePageController {
 
         // Last-Modified 헤더 설정 (구글 신선도 신호)
         if (article.getPublishedAt() != null) {
-            String lastModified = DateTimeFormatter.RFC_1123_DATE_TIME
-                .format(article.getPublishedAt().atOffset(ZoneOffset.UTC));
-            response.setHeader("Last-Modified", lastModified);
+            // publishedAt은 KST 벽시계 시각이다(hibernate.jdbc.time_zone=Asia/Seoul).
+            // UTC로 붙이면 9시간 늦은 시각이 되므로 KST 오프셋을 붙여 같은 순간을 표현한다.
+            ZonedDateTime publishedAt = article.getPublishedAt().atZone(SERVICE_ZONE);
+            response.setHeader("Last-Modified", DateTimeFormatter.RFC_1123_DATE_TIME
+                .format(publishedAt.withZoneSameInstant(ZoneOffset.UTC)));
             // JSON-LD datePublished는 ISO 8601이어야 한다(DTO의 publishedAt은 화면용 "yyyy-MM-dd HH:mm").
-            // Last-Modified와 같은 기준(UTC)으로 맞춘다.
-            model.addAttribute("publishedAtIso", article.getPublishedAt().atOffset(ZoneOffset.UTC)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+            model.addAttribute("publishedAtIso", publishedAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
         }
 
         ArticleListResponseDto articleDto = new ArticleListResponseDto(article);
         model.addAttribute("article", articleDto);
+        // 요약 없는 상세는 noindex, follow (사이트맵과 같은 규칙 — ArticleIndexPolicy)
+        boolean indexable = articleIndexPolicy.isIndexable(article.getSummary());
+        model.addAttribute("articleIndexable", indexable);
+        model.addAttribute("metaDescription", metaDescription(article));
+        // 색인 대상 글은 연관 글을 서버에서 렌더링해 HTML에 내부 링크를 싣는다(null이면 템플릿이 기존 JS 로딩으로 폴백).
+        model.addAttribute("relatedArticles", indexable ? relatedArticlesOrNull(id) : null);
         model.addAttribute("mainRepresentativeChunkInfo", relatedArticleService.getRepresentativeChunkInfo(id));
 
         model.addAttribute("canonicalUrl", baseUrl + canonicalPath(article));
@@ -287,6 +304,37 @@ public class ArticlePageController {
         return articleRepository.findById(id)
             .filter(article -> article.getDeletedAt() == null)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found: " + id));
+    }
+
+    /**
+     * 연관 글 3개. 상세 페이지 JS가 부르는 /api/articles/{id}/related?limit=3과 같은 캐시 키(relatedArticles, 24h)라
+     * 사람 방문에서는 계산이 늘지 않는다. 색인 대상(요약 있는 글)에만 쓰는 이유는 크롤러가 2만 개 상세를 훑을 때
+     * 캐시 미스 벡터 검색이 쏟아지지 않게 하기 위해서다. 실패해도 페이지는 떠야 하므로 null을 돌려 JS 로딩에 맡긴다.
+     */
+    private List<RelatedArticleDto> relatedArticlesOrNull(Long articleId) {
+        try {
+            return relatedArticleService.getRelatedArticles(articleId, RELATED_ARTICLE_LIMIT);
+        } catch (Exception e) {
+            log.warn("연관 글 서버 렌더링 실패, JS 로딩으로 폴백: articleId={} ({})", articleId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 검색 결과·SNS 미리보기용 설명문. AI 요약이 있으면 그 내용을("• " 글머리와 줄바꿈을 걷어 한 문단으로),
+     * 없으면 제목·회사 기반 기본 문구를 쓴다.
+     */
+    private String metaDescription(Article article) {
+        String title = article.getTranslatedTitle() != null ? article.getTranslatedTitle() : article.getTitle();
+        String summary = article.getSummary();
+        if (summary == null || summary.isBlank()) {
+            return title + " - " + article.getCorporation().getName()
+                + " 기술 블로그. NewCodes에서 국내외 IT 기업의 최신 기술 블로그를 한곳에서 만나보세요.";
+        }
+        String flattened = summary.replaceAll("(?m)^\\s*•\\s*", "").replaceAll("\\s*\\R\\s*", " ").trim();
+        return flattened.length() <= META_DESCRIPTION_MAX
+            ? flattened
+            : flattened.substring(0, META_DESCRIPTION_MAX - 1).trim() + "…";
     }
 
     private String canonicalPath(Article article) {

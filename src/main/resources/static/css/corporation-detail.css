@@ -63,3 +63,12 @@
     opacity: 0.8;
 }
 
+
+/* 기업 소개문 (SEO: 서버 렌더링 고유 텍스트) */
+.corporation-intro {
+    margin: 12px 0 0;
+    color: #4B5563;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    word-break: keep-all;
+}

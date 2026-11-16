@@ -49,10 +49,22 @@
       "description": "네이버, 카카오, 토스, 우아한형제들, 라인 등 국내외 IT 기업의 기술 블로그를 한곳에서 모아보는 서비스입니다.",
       "url": "https://newcodes.net",
       "provider": {
-        "@type": "Organization",
-        "name": "NewCodes",
-        "url": "https://newcodes.net"
+        "@id": "https://newcodes.net/#organization"
       }
+    }
+    </script>
+    <!-- 서비스 주체(Organization). 다른 페이지의 publisher/provider가 @id로 이 노드를 가리킨다 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://newcodes.net/#organization",
+      "name": "NewCodes",
+      "url": "https://newcodes.net",
+      "logo": "https://d1g8228yawhpnq.cloudfront.net/favicons/android-icon-192x192.png",
+      "description": "국내외 IT 기업의 기술 블로그와 유튜브 영상을 한곳에서 모아 보여주는 큐레이션 서비스입니다.",
+      "foundingDate": "2025-05",
+      "sameAs": ["https://github.com/NewCodes7/small-town"]
     }
     </script>
 </head>
