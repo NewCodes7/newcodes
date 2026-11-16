@@ -1,16 +1,11 @@
 package com.newcodes7.small_town.crawler.integration.storage;
 
+import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.sksamuel.scrimage.ImmutableImage;
 import com.sksamuel.scrimage.webp.WebpWriter;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import com.amazonaws.AmazonClientException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +17,10 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
@@ -32,15 +31,72 @@ public class S3ImageService {
 
     @Value("${s3.bucket.name}")
     private String bucketName;
-    
+
     @Value("${cloudfront.domain:}")
     private String cloudfrontDomain;
-    
+
     @Value("${cloud.aws.region.static}")
     private String region;
 
     @Value("${s3.image.webp.quality:80}")
     private int webpQuality;
+
+    /**
+     * 최적화된 썸네일 키에 붙는 접미사("{uuid}-w800.jpg"). 백필 배치가 이미 처리한 썸네일을 다시 집지 않게 하는 표식이다.
+     */
+    public static final String OPTIMIZED_SUFFIX = "w" + ThumbnailOptimizer.MAX_WIDTH + ".";
+
+    private ThumbnailOptimizer.Result optimizeOrNull(byte[] imageData, String source) {
+        try {
+            ThumbnailOptimizer.Result result = ThumbnailOptimizer.optimize(imageData);
+            log.debug("썸네일 최적화: {} {}bytes -> {}bytes ({}x{} {})", source, imageData.length,
+                    result.data().length, result.width(), result.height(), result.extension());
+            return result;
+        } catch (Exception e) {
+            log.warn("썸네일 최적화 실패, PNG 변환으로 대체: {} ({})", source, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 이미 S3에 올라간 썸네일(원본 해상도 PNG)을 최적화본으로 다시 올리고 새 URL을 돌려준다.
+     * 원본 객체는 지우지 않는다(이미 공유된 og:image 링크가 깨지지 않게).
+     *
+     * @return 새 URL, 최적화가 의미 없거나(더 커지는 경우) 실패하면 null
+     */
+    public String reuploadOptimizedThumbnail(String thumbnailUrl) throws IOException {
+        String sourceKey = java.net.URLDecoder.decode(extractS3KeyFromUrl(thumbnailUrl), java.nio.charset.StandardCharsets.UTF_8);
+        byte[] original;
+        var s3Object = amazonS3.getObject(bucketName, sourceKey);
+        try (InputStream inputStream = s3Object.getObjectContent()) {
+            original = inputStream.readAllBytes();
+        }
+
+        ThumbnailOptimizer.Result optimized = optimizeOrNull(original, sourceKey);
+        if (optimized == null || optimized.data().length >= original.length) {
+            return null;
+        }
+
+        String baseKey = sourceKey.contains(".") ? sourceKey.substring(0, sourceKey.lastIndexOf('.')) : sourceKey;
+        String newKey = baseKey + "-" + OPTIMIZED_SUFFIX + optimized.extension();
+
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentLength(optimized.data().length);
+        metadata.setContentType(optimized.contentType());
+        metadata.setCacheControl("max-age=31536000");
+        amazonS3.putObject(new PutObjectRequest(bucketName, newKey,
+                new ByteArrayInputStream(optimized.data()), metadata));
+
+        log.info("썸네일 재업로드: {} ({}bytes) -> {} ({}bytes)", sourceKey, original.length, newKey, optimized.data().length);
+        return publicUrl(newKey);
+    }
+
+    private String publicUrl(String s3Key) {
+        if (cloudfrontDomain != null && !cloudfrontDomain.trim().isEmpty()) {
+            return cloudfrontDomain + "/" + s3Key;
+        }
+        return String.format("https://%s.s3.%s.amazonaws.com/%s", bucketName, region, s3Key);
+    }
 
     @Value("${s3.upload.enabled:true}")
     private boolean uploadEnabled;
@@ -100,10 +156,17 @@ public class S3ImageService {
                 contentType = "image/svg+xml";
                 log.debug("SVG 이미지 감지 - 원본 그대로 업로드: {}", imageUrl);
             } else {
-                // PNG로 변환
-                processedImageData = convertToPNG(imageData);
-                fileExtension = "png";
-                contentType = "image/png";
+                // 가로 800px 이하 + 투명도 없으면 JPEG (ThumbnailOptimizer 참고). 실패하면 기존처럼 PNG
+                ThumbnailOptimizer.Result optimized = optimizeOrNull(imageData, imageUrl);
+                if (optimized != null) {
+                    processedImageData = optimized.data();
+                    fileExtension = OPTIMIZED_SUFFIX + optimized.extension();
+                    contentType = optimized.contentType();
+                } else {
+                    processedImageData = convertToPNG(imageData);
+                    fileExtension = "png";
+                    contentType = "image/png";
+                }
             }
 
             // S3 키 생성
@@ -511,10 +574,13 @@ public class S3ImageService {
         String datePrefix = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         String uuid = UUID.randomUUID().toString();
 
-        return String.format("thumbnails/%s/%s/%s.%s",
+        // fileExtension이 "w800.jpg"처럼 최적화 표식을 포함하면 "{uuid}-w800.jpg"가 된다
+        String separator = fileExtension.startsWith(OPTIMIZED_SUFFIX) ? "-" : ".";
+        return String.format("thumbnails/%s/%s/%s%s%s",
                 corporationName.toLowerCase().replaceAll("\\s+", "-"),
                 datePrefix,
                 uuid,
+                separator,
                 fileExtension);
     }
 
