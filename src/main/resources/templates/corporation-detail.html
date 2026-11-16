@@ -2,16 +2,16 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/base}">
 <head>
-    <title th:text="${corporation.name + ' 기술 블로그'}">기술 블로그</title>
+    <title th:text="${corporation.name + ' 기술 블로그 모음 - NewCodes'}">기술 블로그</title>
     <th:block layout:fragment="meta" th:remove="tag">
-        <meta name="description" th:content="${corporation.name} + '의 최신 기술 블로그 소식을 NewCodes에서 확인하세요. 다양한 아티클과 정보를 제공합니다.'">
+        <meta name="description" th:content="${corporationIntro}">
         <meta name="keywords" th:content="${corporation.name} + ', 기술 블로그, 채용, IT, 개발자, NewCodes'">
         <meta name="robots" content="index, follow">
     </th:block>
     <!-- OG 태그 -->
     <meta property="og:type" content="website">
     <meta property="og:title" th:content="${corporation.name} + ' 기술 블로그 | NewCodes'">
-    <meta property="og:description" th:content="${corporation.name} + '의 최신 기술 블로그 아티클을 NewCodes에서 만나보세요.'">
+    <meta property="og:description" th:content="${corporationIntro}">
     <meta th:if="${corporation.logoS3Url != null}" property="og:image" th:content="${corporation.logoS3Url}">
     <!-- 구조화 데이터 (JSON-LD) -->
     <script type="application/ld+json" th:inline="javascript">
@@ -98,6 +98,9 @@
                                         <i class="fas fa-users me-1"></i>채용정보
                                     </a>
                                 </div>
+
+                                <!-- 기업 페이지 소개문: "OO 기술 블로그" 검색 의도에 답하는 고유 텍스트(서버 렌더링) -->
+                                <p class="corporation-intro" th:text="${corporationIntro}">기업 기술 블로그 소개</p>
                             </div>
                             
                             <!-- 통계 정보 -->

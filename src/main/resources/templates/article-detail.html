@@ -8,9 +8,11 @@
     <title th:text="${article.translatedTitle != null ? article.translatedTitle : article.title} + ' - NewCodes'">Article - NewCodes</title>
 
     <!-- SEO Meta Tags -->
-    <meta name="description" th:content="${(article.translatedTitle != null ? article.translatedTitle : article.title) + ' - ' + article.corporation.name + ' 기술 블로그. NewCodes에서 국내외 IT 기업의 최신 기술 블로그를 한곳에서 만나보세요.'}">
+    <!-- 요약 없는 상세는 원문 링크뿐인 얇은 페이지라 색인하지 않는다(ArticleIndexPolicy). 링크는 따라가게 follow 유지 -->
+    <meta name="robots" th:content="${articleIndexable} ? 'index, follow' : 'noindex, follow'">
+    <meta name="description" th:content="${metaDescription}">
     <meta property="og:title" th:content="${(article.translatedTitle != null ? article.translatedTitle : article.title) + ' - ' + article.corporation.name + ' | NewCodes'}">
-    <meta property="og:description" th:content="${(article.translatedTitle != null ? article.translatedTitle : article.title) + ' - ' + article.corporation.name + ' 기술 블로그. NewCodes에서 국내외 IT 기업의 최신 기술 블로그를 한곳에서 만나보세요.'}">
+    <meta property="og:description" th:content="${metaDescription}">
     <meta property="og:image" th:content="${article.thumbnailImage}">
     <meta property="og:type" content="article">
     <meta name="twitter:card" content="summary_large_image">
@@ -24,7 +26,7 @@
       "@context": "https://schema.org",
       "@type": "BlogPosting",
       "headline": /*[[${article.translatedTitle != null ? article.translatedTitle : article.title}]]*/ "",
-      "description": /*[[${article.summary != null ? article.summary : (article.translatedTitle != null ? article.translatedTitle : article.title) + ' - ' + article.corporation.name + ' 기술 블로그'}]]*/ "",
+      "description": /*[[${metaDescription}]]*/ "",
       "image": /*[[${article.thumbnailImage}]]*/ "",
       "datePublished": /*[[${publishedAtIso}]]*/ "",
       "url": /*[[${canonicalUrl}]]*/ "",
@@ -730,9 +732,57 @@
                     <h2 class="related-section-title">연관 추천 글</h2>
                 </header>
 
-                <div id="related-articles-list" class="related-articles-grid">
-                    <!-- Loading state -->
-                    <div id="related-articles-loading" class="related-loading">
+                <!-- 색인 대상 글은 서버에서 렌더링(data-ssr=true, 크롤러가 읽는 내부 링크). 그 외에는 JS가 /api/articles/{id}/related로 채운다 -->
+                <div id="related-articles-list" class="related-articles-grid"
+                     th:attr="data-ssr=${relatedArticles != null}">
+                    <th:block th:if="${relatedArticles != null}">
+                        <div class="blog-card related-ssr-card"
+                             th:each="related : ${relatedArticles}"
+                             th:attr="data-detail-url=${related.detailUrl},data-article-id=${related.id},data-source='RELATED_ARTICLE',data-source-context-id=${article.id}"
+                             onclick="window.location.href=this.getAttribute('data-detail-url')">
+                            <div class="blog-card-thumbnail">
+                                <img th:if="${related.thumbnailImage != null and !#strings.isEmpty(related.thumbnailImage)}"
+                                     th:src="${related.thumbnailImage}" alt="" loading="lazy"
+                                     onerror="handleThumbnailError(this)">
+                                <div th:unless="${related.thumbnailImage != null and !#strings.isEmpty(related.thumbnailImage)}"
+                                     class="default-thumbnail-content">
+                                    <i class="fas fa-code"></i>
+                                </div>
+                            </div>
+                            <div class="blog-card-content">
+                                <div class="blog-card-company">
+                                    <a th:href="@{/corporations/{id}(id=${related.corporation.id})}"
+                                       class="blog-card-company-link" onclick="event.stopPropagation()">
+                                        <img th:if="${related.corporation.effectiveLogoUrl != null}"
+                                             th:src="${related.corporation.effectiveLogoUrl}"
+                                             th:alt="${related.corporation.name}" class="blog-card-company-logo">
+                                        <span class="blog-card-company-name" th:text="${related.corporation.name}">기업</span>
+                                    </a>
+                                </div>
+                                <h3 class="blog-card-title">
+                                    <a class="related-ssr-title-link" th:href="${related.detailUrl}"
+                                       onclick="event.stopPropagation()"
+                                       th:text="${related.translatedTitle != null ? related.translatedTitle : related.title}">연관 글</a>
+                                </h3>
+                                <div class="blog-card-meta">
+                                    <span class="blog-card-date">
+                                        <i class="far fa-clock"></i>
+                                        <span th:text="${related.publishedAt != null ? #temporals.format(related.publishedAt, 'yyyy.MM.dd') : ''}"></span>
+                                    </span>
+                                    <button class="like-button" th:attr="data-article-id=${related.id}"
+                                            onclick="event.stopPropagation(); toggleRelatedArticleLike(this, event)">
+                                        <i class="far fa-heart like-icon"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div th:if="${relatedArticles.isEmpty()}" class="related-empty">
+                            <i class="fas fa-search"></i>
+                            <p>관련 글이 없습니다</p>
+                        </div>
+                    </th:block>
+                    <!-- Loading state (JS 로딩 경로) -->
+                    <div th:if="${relatedArticles == null}" id="related-articles-loading" class="related-loading">
                         <i class="fas fa-spinner fa-spin"></i>
                         <p>관련 글을 찾고 있습니다...</p>
                     </div>
@@ -948,6 +998,8 @@
 
                 const articleId = likeBtn.getAttribute('data-article-id');
                 const container = document.getElementById('related-articles-list');
+                // 서버에서 이미 렌더링했으면(색인 대상 글) 다시 받아 덮어쓰지 않는다 — 덮어쓰면 내부 링크가 사라진다
+                if (container.dataset.ssr === 'true') return;
 
                 try {
                     const response = await fetch(`/api/articles/${articleId}/related?limit=3`);

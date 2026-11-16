@@ -895,6 +895,38 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     List<Object[]> findAllActiveArticlesForSitemap();
 
     /**
+     * Sitemap 생성용 경량 조회 — 색인 대상(AI 요약이 있는 글)만.
+     * 상세 페이지 robots 메타와 같은 규칙(ArticleIndexPolicy)이라 "사이트맵엔 있는데 noindex"가 생기지 않는다.
+     */
+    @Query(value = "SELECT a.id, a.title, a.translated_title, a.published_at " +
+           "FROM article a " +
+           "WHERE a.deleted_at IS NULL " +
+           "AND a.summary IS NOT NULL AND btrim(a.summary) <> '' " +
+           "ORDER BY a.published_at DESC",
+           nativeQuery = true)
+    List<Object[]> findIndexableArticlesForSitemap();
+
+    /**
+     * 썸네일 백필 대상: 원본 해상도로 올라간 레거시 PNG 썸네일(id, thumbnail_image).
+     * id 내림차순 커서 방식이라, 최적화할 수 없어 건너뛴 글을 다음 호출이 다시 집지 않는다.
+     */
+    @Query(value = "SELECT a.id, a.thumbnail_image FROM article a " +
+           "WHERE a.deleted_at IS NULL " +
+           "AND a.id < :beforeId " +
+           "AND a.thumbnail_image LIKE '%/thumbnails/%.png' " +
+           // 이미 최적화된 썸네일("{uuid}-w800.png", 투명 배경이라 PNG로 남은 것)은 다시 집지 않는다
+           "AND a.thumbnail_image NOT LIKE '%-w800.%' " +
+           "ORDER BY a.id DESC " +
+           "LIMIT :limit",
+           nativeQuery = true)
+    List<Object[]> findLegacyPngThumbnailsBefore(@Param("beforeId") long beforeId, @Param("limit") int limit);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Article a SET a.thumbnailImage = :thumbnailImage WHERE a.id = :id")
+    int updateThumbnailImage(@Param("id") Long id, @Param("thumbnailImage") String thumbnailImage);
+
+    /**
      * Sitemap lastmod용: 전체 최신 아티클 발행일 조회
      */
     @Query(value = "SELECT MAX(a.published_at) FROM article a WHERE a.deleted_at IS NULL",

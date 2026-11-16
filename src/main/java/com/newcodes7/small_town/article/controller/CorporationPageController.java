@@ -153,9 +153,30 @@ public class CorporationPageController {
         model.addAttribute("currentPage", page);
         model.addAttribute("totalPages", articles.getTotalPages());
         model.addAttribute("totalElements", articles.getTotalElements());
+        model.addAttribute("corporationIntro", corporationIntro(corporation, page == 0 ? articles : null));
 
         model.addAttribute("canonicalUrl", baseUrl + "/corporations/" + corporationId);
         return "corporation-detail";
+    }
+
+    /**
+     * 기업 페이지 소개문(본문 + meta description 공용). "OO 기술 블로그"로 검색한 사람에게 이 페이지가
+     * 무엇인지 답하는 고유 텍스트다. 최신 글 날짜는 0페이지(정규 URL)에서만 알 수 있어 그때만 넣는다.
+     */
+    static String corporationIntro(CorporationDetailDto corporation, Page<ArticleListResponseDto> firstPage) {
+        StringBuilder intro = new StringBuilder()
+            .append(corporation.getName()).append(" 기술 블로그에 올라온 글 ")
+            .append(String.format("%,d", corporation.getArticleCount()))
+            .append("개를 최신순으로 모았습니다.");
+        if (firstPage != null && !firstPage.isEmpty()) {
+            String publishedAt = firstPage.getContent().get(0).getPublishedAt();
+            if (publishedAt != null && publishedAt.length() >= 10) {
+                intro.append(" 가장 최근 글은 ").append(publishedAt, 0, 10).append("에 올라왔습니다.");
+            }
+        }
+        return intro.append(" NewCodes가 매일 새 글을 수집하며, 원문은 ")
+            .append(corporation.getName()).append(" 공식 기술 블로그에서 읽을 수 있습니다.")
+            .toString();
     }
 
     private static int clampPageSize(int size) {

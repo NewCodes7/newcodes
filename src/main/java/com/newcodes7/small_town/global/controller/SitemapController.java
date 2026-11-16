@@ -1,8 +1,11 @@
 package com.newcodes7.small_town.global.controller;
 
 import com.newcodes7.small_town.article.repository.ArticleRepository;
+import com.newcodes7.small_town.article.service.ArticleIndexPolicy;
 import com.newcodes7.small_town.corporation.repository.CorporationRepository;
 import com.newcodes7.small_town.global.entity.Corporation;
+import com.newcodes7.small_town.theme.entity.Theme;
+import com.newcodes7.small_town.theme.repository.ThemeRepository;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -23,6 +26,8 @@ public class SitemapController {
 
     private final ArticleRepository articleRepository;
     private final CorporationRepository corporationRepository;
+    private final ArticleIndexPolicy articleIndexPolicy;
+    private final ThemeRepository themeRepository;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -52,6 +57,14 @@ public class SitemapController {
         appendUrl(xml, baseUrl + "/articles", "daily", "0.9", latestDate);
         appendUrl(xml, baseUrl + "/video", "weekly", "0.8", latestDate);
         appendUrl(xml, baseUrl + "/corporations", "weekly", "0.8", latestDate);
+        appendUrl(xml, baseUrl + "/themes", "weekly", "0.8", null);
+        appendUrl(xml, baseUrl + "/about", "monthly", "0.5", null);
+
+        // 테마 상세 페이지 — 직접 큐레이션한 고유 콘텐츠라 아티클 상세보다 색인 가치가 높다
+        for (Theme theme : themeRepository.findByIsActiveTrueAndDeletedAtIsNullOrderByDisplayOrderAsc()) {
+            String lastmod = theme.getUpdatedAt() != null ? theme.getUpdatedAt().format(DATE_FORMATTER) : null;
+            appendUrl(xml, baseUrl + "/themes/" + theme.getId(), "weekly", "0.8", lastmod);
+        }
 
         // 기업 상세 페이지
         List<Corporation> corporations = corporationRepository.findAllActive();
@@ -60,8 +73,10 @@ public class SitemapController {
                 corpLatestDate.get(corp.getId()));
         }
 
-        // 아티클 상세 페이지 (content 제외 경량 조회)
-        List<Object[]> articles = articleRepository.findAllActiveArticlesForSitemap();
+        // 아티클 상세 페이지 (content 제외 경량 조회) — 색인 대상만 싣는다(ArticleIndexPolicy)
+        List<Object[]> articles = articleIndexPolicy.isIndexRequiresSummary()
+            ? articleRepository.findIndexableArticlesForSitemap()
+            : articleRepository.findAllActiveArticlesForSitemap();
         for (Object[] row : articles) {
             Long id = ((Number) row[0]).longValue();
             String title = (String) row[1];
