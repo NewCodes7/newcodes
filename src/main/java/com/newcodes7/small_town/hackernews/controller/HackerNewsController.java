@@ -6,6 +6,7 @@ import com.newcodes7.small_town.hackernews.service.HackerNewsService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 @Controller
@@ -35,7 +37,13 @@ public class HackerNewsController {
      */
     @GetMapping("/hackernews/{id}")
     public String detail(@PathVariable Long id, Model model) {
-        HackerNewsItemResponseDto item = hackerNewsService.getItem(id);
+        HackerNewsItemResponseDto item;
+        try {
+            item = hackerNewsService.getItem(id);
+        } catch (IllegalArgumentException e) {
+            // 없는 아이템은 500이 아니라 404
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
         List<HackerNewsCommentResponseDto> comments = hackerNewsService.getComments(id);
 
         model.addAttribute("item", item);

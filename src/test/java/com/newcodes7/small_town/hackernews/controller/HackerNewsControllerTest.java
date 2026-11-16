@@ -4,23 +4,23 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.newcodes7.small_town.hackernews.dto.HackerNewsCommentResponseDto;
+import com.newcodes7.small_town.hackernews.dto.HackerNewsItemResponseDto;
+import com.newcodes7.small_town.hackernews.entity.HackerNewsComment;
+import com.newcodes7.small_town.hackernews.entity.HackerNewsItem;
+import com.newcodes7.small_town.hackernews.service.HackerNewsService;
 import java.util.Collections;
 import java.util.List;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.ui.ConcurrentModel;
 import org.springframework.ui.Model;
-
-import com.newcodes7.small_town.hackernews.dto.HackerNewsCommentResponseDto;
-import com.newcodes7.small_town.hackernews.dto.HackerNewsItemResponseDto;
-import com.newcodes7.small_town.hackernews.entity.HackerNewsComment;
-import com.newcodes7.small_town.hackernews.entity.HackerNewsItem;
-import com.newcodes7.small_town.hackernews.service.HackerNewsService;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class HackerNewsControllerTest {
@@ -58,6 +58,20 @@ class HackerNewsControllerTest {
         @SuppressWarnings("unchecked")
         List<HackerNewsCommentResponseDto> comments = (List<HackerNewsCommentResponseDto>) model.getAttribute("comments");
         assertThat(comments).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("detail: 없는 아이템은 500이 아니라 404")
+    void detail_없는아이템_404() {
+        // given
+        when(hackerNewsService.getItem(999L))
+            .thenThrow(new IllegalArgumentException("HackerNewsItem not found: 999"));
+
+        // when & then
+        assertThatThrownBy(() -> hackerNewsController.detail(999L, new ConcurrentModel()))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     // ===== API 테스트 =====

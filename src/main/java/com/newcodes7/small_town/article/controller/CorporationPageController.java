@@ -6,6 +6,8 @@ import com.newcodes7.small_town.auth.entity.User;
 import com.newcodes7.small_town.corporation.dto.CorporationDetailDto;
 import com.newcodes7.small_town.corporation.dto.CorporationResponseDto;
 import com.newcodes7.small_town.corporation.entity.Industry;
+import com.newcodes7.small_town.corporation.exception.CorporationNotFoundException;
+import com.newcodes7.small_town.corporation.exception.InvalidParameterException;
 import com.newcodes7.small_town.corporation.repository.IndustryRepository;
 import com.newcodes7.small_town.corporation.service.CorporationService;
 import com.newcodes7.small_town.search.entity.SearchLog;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
@@ -26,6 +29,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 기업 목록/상세 Thymeleaf 페이지 렌더링 컨트롤러.
@@ -34,6 +38,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 @RequiredArgsConstructor
 public class CorporationPageController {
+
+    private static final int MAX_PAGE_SIZE = 50;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -54,6 +60,10 @@ public class CorporationPageController {
             @RequestParam(required = false) List<Integer> industries,
             @RequestParam(defaultValue = "popular") String sort,
             Model model) {
+
+        // 음수 page·0 이하 size는 PageRequest.of에서 IllegalArgumentException → 500이 된다
+        page = Math.max(0, page);
+        size = clampPageSize(size);
 
         // 정렬 옵션 설정
         Sort sortOption;
@@ -115,7 +125,16 @@ public class CorporationPageController {
                                   @AuthenticationPrincipal UserDetails userDetails,
                                   HttpServletRequest request,
                                   Model model) {
-        CorporationDetailDto corporation = articleService.getCorporationDetail(corporationId);
+        page = Math.max(0, page);
+        size = clampPageSize(size);
+
+        CorporationDetailDto corporation;
+        try {
+            corporation = articleService.getCorporationDetail(corporationId);
+        } catch (CorporationNotFoundException | InvalidParameterException e) {
+            // CorporationExceptionHandler는 corporation 패키지 컨트롤러에만 적용돼 이 페이지에선 500이 됐다
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
 
         // 검색 로그 저장 (keyword 파라미터가 있고 로그인한 경우)
         if (keyword != null && !keyword.trim().isEmpty() && userDetails != null) {
@@ -137,5 +156,9 @@ public class CorporationPageController {
 
         model.addAttribute("canonicalUrl", baseUrl + "/corporations/" + corporationId);
         return "corporation-detail";
+    }
+
+    private static int clampPageSize(int size) {
+        return Math.max(1, Math.min(size, MAX_PAGE_SIZE));
     }
 }
