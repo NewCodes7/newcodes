@@ -12,6 +12,8 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--/* 페이지 템플릿의 <title>은 반드시 th:text로 쓴다. 정적 텍스트만 있으면 Layout Dialect가 이 기본 제목으로 덮어
+         /, /articles, /themes, /about 등이 모두 같은 제목이 됐었다(SeoTemplateRenderingTest가 검사) */-->
     <title th:text="${title != null ? title + ' - NewCodes' : 'NewCodes - 기술 블로그 모음'}">NewCodes</title>
 
     <!-- Canonical URL -->

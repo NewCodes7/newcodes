@@ -8,8 +8,8 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.newcodes7.small_town.article.exception.CorporationNotFoundException;
 import com.newcodes7.small_town.article.service.ArticleService;
-import com.newcodes7.small_town.corporation.exception.CorporationNotFoundException;
 import com.newcodes7.small_town.corporation.repository.IndustryRepository;
 import com.newcodes7.small_town.corporation.service.CorporationService;
 import com.newcodes7.small_town.video.repository.VideoRepository;
@@ -96,5 +96,27 @@ class CorporationPageControllerTest {
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("corporationDetail: 잘못된 ID(0 이하)도 404")
+    void corporationDetail_잘못된ID_404() {
+        when(articleService.getCorporationDetail(0L))
+            .thenThrow(new com.newcodes7.small_town.article.exception.InvalidParameterException("corporationId", 0L));
+
+        assertThatThrownBy(() -> controller.corporationDetail(0L, 0, 10, null, null,
+                new MockHttpServletRequest(), new ConcurrentModel()))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("목이 던지는 예외는 ArticleService가 실제로 선언한 클래스여야 한다(같은 이름의 다른 패키지 클래스 혼동 방지)")
+    void 실제_서비스가_던지는_예외클래스와_일치() throws Exception {
+        String source = java.nio.file.Files.readString(java.nio.file.Path.of(
+            "src/main/java/com/newcodes7/small_town/article/service/ArticleService.java"));
+
+        assertThat(source).contains("import " + CorporationNotFoundException.class.getName() + ";");
     }
 }

@@ -118,6 +118,19 @@ class SeoTemplateRenderingTest {
     }
 
     @Test
+    @DisplayName("아티클 상세: summary가 원문 RSS 발췌면 noindex, \"AI 3줄 요약\" 영역을 그리지 않는다")
+    void articleDetail_원문발췌() {
+        Model model = renderArticleModel("DDL 관리는 어떻게 하고 계신가요?");
+
+        String html = render("article-detail", model);
+
+        assertThat(html).contains("<meta name=\"robots\" content=\"noindex, follow\">");
+        assertThat(html).doesNotContain("class=\"article-ai-summary\"");
+        assertThat(html).doesNotContain("DDL 관리는 어떻게 하고 계신가요?");
+        assertThat(html).contains("data-ssr=\"false\"");
+    }
+
+    @Test
     @DisplayName("기업 상세: 소개문이 본문과 설명문에 들어가고 페이지네이션 이전 링크가 없다")
     void corporationDetail() {
         ArticleService articleService = mock(ArticleService.class);
@@ -149,6 +162,8 @@ class SeoTemplateRenderingTest {
         String list = render("themes", modelOf(Map.of("themes", List.of(dto), "canonicalUrl", BASE_URL + "/themes")));
         String detail = render("theme-detail", modelOf(Map.of("theme", dto, "canonicalUrl", BASE_URL + "/themes/5")));
 
+        // 정적 <title>이 레이아웃 기본 제목에 덮이지 않아야 한다(/, /articles, /themes, /about이 같은 제목이던 문제)
+        assertThat(list).contains("<title>테마 - NewCodes</title>");
         assertThat(list).containsOnlyOnce("name=\"description\"");
         assertThat(list).contains("<link rel=\"canonical\" href=\"https://newcodes.net/themes\">");
         assertThat(detail).contains("<meta name=\"description\" content=\"신입에게 권하는 글 모음\">");

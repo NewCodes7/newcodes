@@ -1,13 +1,13 @@
 package com.newcodes7.small_town.article.controller;
 
 import com.newcodes7.small_town.article.dto.ArticleListResponseDto;
+import com.newcodes7.small_town.article.exception.CorporationNotFoundException;
+import com.newcodes7.small_town.article.exception.InvalidParameterException;
 import com.newcodes7.small_town.article.service.ArticleService;
 import com.newcodes7.small_town.auth.entity.User;
 import com.newcodes7.small_town.corporation.dto.CorporationDetailDto;
 import com.newcodes7.small_town.corporation.dto.CorporationResponseDto;
 import com.newcodes7.small_town.corporation.entity.Industry;
-import com.newcodes7.small_town.corporation.exception.CorporationNotFoundException;
-import com.newcodes7.small_town.corporation.exception.InvalidParameterException;
 import com.newcodes7.small_town.corporation.repository.IndustryRepository;
 import com.newcodes7.small_town.corporation.service.CorporationService;
 import com.newcodes7.small_town.search.entity.SearchLog;
@@ -132,7 +132,8 @@ public class CorporationPageController {
         try {
             corporation = articleService.getCorporationDetail(corporationId);
         } catch (CorporationNotFoundException | InvalidParameterException e) {
-            // CorporationExceptionHandler는 corporation 패키지 컨트롤러에만 적용돼 이 페이지에선 500이 됐다
+            // ArticleService는 article.exception 쪽 예외를 던진다(corporation.exception에 같은 이름의 클래스가 따로 있다).
+            // 뷰 요청에서는 RestApiExceptionHandler가 ArticleException을 다시 던져 500이 됐다
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         }
 

@@ -24,11 +24,23 @@ public class ArticleIndexPolicy {
         this.indexRequiresSummary = indexRequiresSummary;
     }
 
-    public boolean isIndexable(String summary) {
-        return !indexRequiresSummary || StringUtils.hasText(summary);
+    /**
+     * AI 3줄 요약 표식. {@code ArticleSummaryResponse.toDisplayText()}는 줄마다 "• "로 시작하는 형식만 만든다.
+     * Article.summary 컬럼에는 예전 크롤러가 넣은 원문 RSS 발췌("Date:2025.08.07", 목차 텍스트 등)가
+     * 3천여 건 남아 있어서, "값이 있다"가 아니라 이 형식인지로 AI 요약을 가려야 한다.
+     * 사이트맵·요약 생성 배치 쿼리도 같은 표식('•%')을 쓴다.
+     */
+    public static final String AI_SUMMARY_MARKER = "\u2022";
+
+    public static boolean isAiSummary(String summary) {
+        return StringUtils.hasText(summary) && summary.strip().startsWith(AI_SUMMARY_MARKER);
     }
 
-    /** 사이트맵이 요약 있는 글만 실어야 하는지 */
+    public boolean isIndexable(String summary) {
+        return !indexRequiresSummary || isAiSummary(summary);
+    }
+
+    /** 사이트맵이 AI 요약 있는 글만 실어야 하는지 */
     public boolean isIndexRequiresSummary() {
         return indexRequiresSummary;
     }
