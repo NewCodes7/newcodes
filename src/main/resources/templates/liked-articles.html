@@ -3,7 +3,7 @@
         xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/base}">
 <head>
-    <title>좋아요 모음</title>
+    <title th:text="'좋아요 모음'">좋아요 모음</title>
     <th:block layout:fragment="meta" th:remove="tag">
         <meta name="description" content="내가 좋아요한 기술 블로그 글과 영상 모음">
         <meta name="keywords" content="좋아요, 북마크, 기술 블로그, 유튜브">

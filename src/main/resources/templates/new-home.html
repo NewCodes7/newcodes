@@ -4,7 +4,7 @@
         xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
       layout:decorate="~{layout/base}">
 <head>
-    <title>기술 블로그 모음 - NewCodes | 국내외 IT 기업 블로그 한곳에서</title>
+    <title th:text="'기술 블로그 모음 - NewCodes | 국내외 IT 기업 블로그 한곳에서'">기술 블로그 모음 - NewCodes | 국내외 IT 기업 블로그 한곳에서</title>
     <th:block layout:fragment="meta" th:remove="tag">
         <meta name="description" content="국내외 IT 기업의 최신 기술 블로그를 한곳에서 만나보세요. NewCodes는 네이버, 카카오, 토스 등 기업 기술 블로그 모음 서비스입니다.">
         <meta name="keywords" content="기술 블로그 모음, 기업 기술 블로그, 개발자 블로그, IT 블로그, 기술 아티클, 개발자, NewCodes">
