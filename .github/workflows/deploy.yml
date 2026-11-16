@@ -101,8 +101,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 이미지 이름은 레포 이름에서 만들지 않고 고정한다. 서버(docker-compose.yml, deploy.sh)가
+      # ghcr.io/newcodes7/small-town:latest를 pull하는데, 레포를 small-town → newcodes로 바꾼 뒤
+      # ${GITHUB_REPOSITORY,,}가 newcodes7/newcodes가 되어 새 이미지가 다른 패키지로 올라가고
+      # 서버는 옛 이미지를 계속 받아 "배포 성공"인데 옛 코드가 도는 상태가 된다.
       - name: Set image name
-        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+        run: echo "IMAGE_NAME=ghcr.io/newcodes7/small-town" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
