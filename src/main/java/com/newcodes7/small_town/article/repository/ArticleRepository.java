@@ -914,6 +914,8 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
            "WHERE a.deleted_at IS NULL " +
            "AND a.id < :beforeId " +
            "AND a.thumbnail_image LIKE '%/thumbnails/%.png' " +
+           // 이미 최적화된 썸네일("{uuid}-w800.png", 투명 배경이라 PNG로 남은 것)은 다시 집지 않는다
+           "AND a.thumbnail_image NOT LIKE '%-w800.%' " +
            "ORDER BY a.id DESC " +
            "LIMIT :limit",
            nativeQuery = true)
